@@ -3,6 +3,7 @@ name: Validate SBOMs
 on:
   pull_request:
     branches: ['main']
+  push:
 
 env:
   SPDX_TOOLS_VERSION: 1.1.0
