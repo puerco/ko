@@ -1,3 +1,35 @@
+# v1.17.8 (2022-09-30)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.7 (2022-09-20)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.6 (2022-09-14)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.5 (2022-09-02)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.4 (2022-08-31)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.3 (2022-08-30)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.2 (2022-08-29)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.17.1 (2022-08-15)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
 # v1.17.0 (2022-08-14)
 
 * **Feature**: Add alternative mechanism for determning the users `$HOME` or `%USERPROFILE%` location when the environment variables are not present.
