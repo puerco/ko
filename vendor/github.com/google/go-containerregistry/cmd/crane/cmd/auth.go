@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -26,19 +26,20 @@ import (
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/types"
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 )
 
 // NewCmdAuth creates a new cobra.Command for the auth subcommand.
-func NewCmdAuth(argv ...string) *cobra.Command {
+func NewCmdAuth(options []crane.Option, argv ...string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Log in or access credentials",
 		Args:  cobra.NoArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
 	}
-	cmd.AddCommand(NewCmdAuthGet(argv...), NewCmdAuthLogin(argv...))
+	cmd.AddCommand(NewCmdAuthGet(options, argv...), NewCmdAuthLogin(argv...), NewCmdAuthLogout(argv...))
 	return cmd
 }
 
@@ -62,30 +63,41 @@ func toCreds(config *authn.AuthConfig) credentials {
 }
 
 // NewCmdAuthGet creates a new `crane auth get` command.
-func NewCmdAuthGet(argv ...string) *cobra.Command {
+func NewCmdAuthGet(options []crane.Option, argv ...string) *cobra.Command {
 	if len(argv) == 0 {
 		argv = []string{os.Args[0]}
 	}
 
+	baseCmd := strings.Join(argv, " ")
 	eg := fmt.Sprintf(`  # Read configured credentials for reg.example.com
-  echo "reg.example.com" | %s get
-  {"username":"AzureDiamond","password":"hunter2"}`, strings.Join(argv, " "))
+  $ echo "reg.example.com" | %s get
+  {"username":"AzureDiamond","password":"hunter2"}
+  # or
+  $ %s get reg.example.com
+  {"username":"AzureDiamond","password":"hunter2"}`, baseCmd, baseCmd)
 
 	return &cobra.Command{
-		Use:     "get",
+		Use:     "get [REGISTRY_ADDR]",
 		Short:   "Implements a credential helper",
 		Example: eg,
-		Args:    cobra.NoArgs,
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			b, err := ioutil.ReadAll(os.Stdin)
+			registryAddr := ""
+			if len(args) == 1 {
+				registryAddr = args[0]
+			} else {
+				b, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return err
+				}
+				registryAddr = strings.TrimSpace(string(b))
+			}
+
+			reg, err := name.NewRegistry(registryAddr)
 			if err != nil {
 				return err
 			}
-			reg, err := name.NewRegistry(strings.TrimSpace(string(b)))
-			if err != nil {
-				return err
-			}
-			authorizer, err := authn.DefaultKeychain.Resolve(reg)
+			authorizer, err := crane.GetOptions(options...).Keychain.Resolve(reg)
 			if err != nil {
 				return err
 			}
@@ -158,7 +170,7 @@ type loginOptions struct {
 
 func login(opts loginOptions) error {
 	if opts.passwordStdin {
-		contents, err := ioutil.ReadAll(os.Stdin)
+		contents, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return err
 		}
@@ -190,4 +202,43 @@ func login(opts loginOptions) error {
 	}
 	log.Printf("logged in via %s", cf.Filename)
 	return nil
+}
+
+// NewCmdAuthLogout creates a new `crane auth logout` command.
+func NewCmdAuthLogout(argv ...string) *cobra.Command {
+	eg := fmt.Sprintf(`  # Log out of reg.example.com
+  %s logout reg.example.com`, strings.Join(argv, " "))
+
+	cmd := &cobra.Command{
+		Use:     "logout [SERVER]",
+		Short:   "Log out of a registry",
+		Example: eg,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := name.NewRegistry(args[0])
+			if err != nil {
+				return err
+			}
+			serverAddress := reg.Name()
+
+			cf, err := config.Load(os.Getenv("DOCKER_CONFIG"))
+			if err != nil {
+				return err
+			}
+			creds := cf.GetCredentialsStore(serverAddress)
+			if serverAddress == name.DefaultRegistry {
+				serverAddress = authn.DefaultAuthKey
+			}
+			if err := creds.Erase(serverAddress); err != nil {
+				return err
+			}
+
+			if err := cf.Save(); err != nil {
+				return err
+			}
+			log.Printf("logged out via %s", cf.Filename)
+			return nil
+		},
+	}
+	return cmd
 }
